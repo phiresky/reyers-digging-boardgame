@@ -30,7 +30,7 @@ const tileSize = "3rem";
 const fr = (width: number) => ({
   gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
 });
-function AboveGround(props: { game: Game }) {
+const AboveGround: React.FC<{ game: Game }> = observer((props) => {
   const game = props.game;
   return (
     <div
@@ -47,17 +47,19 @@ function AboveGround(props: { game: Game }) {
           <div className="text-center">{player.info.name}</div>
           <div>Coins: {player.state.coins}</div>
           <div>Fuel: {player.state.fuel}</div>
-          <div>Upgrades: {player.state.digger ? "Digger" : ""}</div>
+          <div>
+            Upgrades: {player.state.digger ? "Digger" : ""}{" "}
+            <button className="border border-black p-1">Buy</button>
+          </div>
         </div>
       ))}
     </div>
   );
-}
+});
 
 const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
   // game consists of a grid of width playercount*5 and he^ight 12.
   const width = game.players.length * game.tileWidthPerPlayer;
-  const height = 12;
 
   // cumulative sum of lyaer depths
   const layerSplits = game.layerDepths.map((d, i) =>
@@ -96,9 +98,9 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
       {game.players.map((player, i) => (
         <PlayerView
           key={i}
-          name={player}
-          x={game.playerPositions[i].x}
-          y={game.playerPositions[i].y}
+          name={player.info.name}
+          x={player.state.x}
+          y={player.state.y}
         />
       ))}
     </div>
@@ -146,10 +148,14 @@ const playerSvg = (
     {/*<!-- Window -->*/}
     <path d="M11 8 Q15 8 15 12 L15 14 Q11 14 11 10 Z" fill="lightblue" />
 
-    {/*<!-- Propeller (squished horizontally, center slightly above dome) -->*/}
-    <g transform="translate(10 7.5)">
+    {/*<!-- Pole for propeller -->*/}
+    <rect x="9.5" y="5" width="1" height="3" fill="gray" />
+
+    {/*<!-- Propeller (squished horizontally, centered on top of pole) -->*/}
+    <g transform="translate(10 5)">
       <ellipse rx="6" ry="0.6" fill="gray" transform="rotate(10)" />
-      <ellipse rx="5.8" ry="0.5" fill="lightgray" transform="rotate(-20)" />
+      <ellipse rx="5.8" ry="0.5" fill="lightgray" transform="rotate(160)" />
+      <ellipse rx="5.6" ry="0.4" fill="darkgray" transform="rotate(190)" />
     </g>
   </svg>
 );

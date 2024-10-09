@@ -1,4 +1,4 @@
-import { makeAutoObservable, observable } from "mobx";
+import { makeAutoObservable } from "mobx";
 import { randomGenerator } from "~/util";
 
 type PlayerState = {
@@ -7,27 +7,34 @@ type PlayerState = {
   hull: number;
   digger: number;
   radar: number;
+  x: number;
+  y: number;
 };
 export class Game {
+  tileWidthPerPlayer = 6;
+
   players: { info: { name: string }; state: PlayerState }[] = [
     "Frank",
     "Joyce",
     "Flonk",
     "Boar",
-  ].map((name) => ({
+  ].map((name, i) => ({
     info: { name },
-    state: { fuel: 100, coins: 0, hull: 1, digger: 0, radar: 1 },
+    state: {
+      fuel: 20,
+      coins: 10,
+      hull: 1,
+      digger: 0,
+      radar: 1,
+      x: i * this.tileWidthPerPlayer + 3,
+      y: 0,
+    },
   }));
 
   grid: Tile[][];
   seed = "Hello";
-  tileWidthPerPlayer = 6;
   // how many rows each of the layers has
   layerDepths = [1, 5, 4, 3];
-  playerPositions = this.players.map((_, i) => ({
-    x: i * this.tileWidthPerPlayer + 3,
-    y: 0,
-  }));
   warnings: string[] = [];
   constructor() {
     this.grid = randomGrid(this);
@@ -37,16 +44,16 @@ export class Game {
 
   clickTile(x: number, y: number) {
     // find nearest player
-    const playerI = this.playerPositions.reduce(
+    const playerI = this.players.reduce(
       (bestI, pos, i) =>
-        Math.abs(pos.x - x) < Math.abs(this.playerPositions[bestI].x - x)
+        Math.abs(pos.state.x - x) < Math.abs(this.players[bestI].state.x - x)
           ? i
           : bestI,
       0
     );
-    const playerPos = this.playerPositions[playerI];
-    const dX = x - playerPos.x;
-    const dY = y - playerPos.y;
+    const player = this.players[playerI];
+    const dX = x - player.state.x;
+    const dY = y - player.state.y;
     // check if player is close enough
     if (Math.abs(dX) + Math.abs(dY) > 1) {
       this.warn("You can not move there, it is too far!");
@@ -61,12 +68,51 @@ export class Game {
       this.warn("You can not dig upwards!");
       return;
     }
-    if (isDigging && this.grid[playerPos.y + 1][playerPos.x].type === "air") {
+    if (
+      isDigging &&
+      this.grid[player.state.y + 1][player.state.x].type === "air"
+    ) {
       this.warn("You can not dig while in air!");
       return;
     }
     // move player to clicked position
-    this.playerPositions[playerI] = { x, y };
+    player.state.x = x;
+    player.state.y = y;
+    /*
+    - Earth: Digging costs 1 fuel, worth 1 coin each.
+- Rock: Digging costs 2 but only possible with digger upgrade. Worth 0.
+- Copper: Digging costs 2, worth 10 coins each
+- Iron:  Digging costs 2, worth 15 coins each
+- Gold: Digging costs 3, worth 50 coins each
+- Diamond: Digging costs 5, worth 100 coins each
+- Treasure: Digging costs 1, worth 500 coins each
+- Lave: Digging free with hull upgrade. Falls on you, kills you.
+*/
+    const fuelUsed = {
+      air: 0,
+      earth: 1,
+      rock: 2,
+      copper: 2,
+      iron: 2,
+      gold: 3,
+      diamond: 5,
+      treasure: 1,
+      lava: 0,
+    };
+    const coinsGained = {
+      air: 0,
+      earth: 1,
+      rock: 0,
+      copper: 10,
+      iron: 15,
+      gold: 50,
+      diamond: 100,
+      treasure: 500,
+      lava: 0,
+    };
+
+    player.state.fuel -= fuelUsed[this.grid[y][x].type];
+    player.state.coins += coinsGained[this.grid[y][x].type];
     this.grid[y][x] = { type: "air" };
   }
   warn(message: string) {
