@@ -14,11 +14,17 @@
     "@remix-run/node": "^2.12.1",
     "@remix-run/react": "^2.12.1",
     "@remix-run/serve": "^2.12.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "better-sse": "^0.13.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
     "isbot": "^4.1.0",
     "mobx": "^6.13.3",
     "mobx-react-lite": "^4.0.7",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "tsx": "^4.19.1"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.12.1",

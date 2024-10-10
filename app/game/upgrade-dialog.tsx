@@ -1,9 +1,10 @@
 import { observer } from "mobx-react-lite";
-import { PlayerState } from "./player";
+import { TablePlayerSeat } from "./player";
 
 export const UpgradeDialog: React.FC<{
-  player: PlayerState;
+  player: TablePlayerSeat;
 }> = observer(({ player }) => {
+  if (!player.game || player.playerId === undefined) return null;
   const purchased = player.game.players[player.playerId].state.upgrades;
   // for each upgrade, display a header and description below with a buy button, if already bought gray it out and add purchased text
   return (

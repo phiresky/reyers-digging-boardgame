@@ -1,3 +1,5 @@
+import { Game, GameEvent, GameEventData } from "./game/logic";
+
 function cyrb128(str: string) {
   let h1 = 1779033703,
     h2 = 3144134277,
@@ -37,3 +39,35 @@ export const randomGenerator = (seedStr: string) => {
   const seed = cyrb128(seedStr);
   return xoshiro128ss(seed[0], seed[1], seed[2], seed[3]);
 };
+
+export async function getSHA256Hash(input: string) {
+  const textAsBuffer = new TextEncoder().encode(input);
+  const hashBuffer = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    textAsBuffer
+  );
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hash = hashArray
+    .map((item) => item.toString(16).padStart(2, "0"))
+    .join("");
+  return hash;
+}
+
+export function cryptoRandomId(len: number) {
+  // create a random hex string
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(len)))
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function gameFromEvents(
+  events: GameEvent[],
+  chainEvent: (d: GameEventData) => void
+) {
+  const config = events.filter((e) => e.type === "system-init").slice(-1)[0];
+  if (!config) throw Error("No init event");
+  const players = events
+    .filter((g) => g.type === "system-join-player")
+    .map((p) => p.player);
+  return new Game(config, players, chainEvent);
+}

@@ -46,23 +46,25 @@ export const defaultGameConfig = {
 };
 export type GameConfig = typeof defaultGameConfig;
 
-type PlayerInfo = { name: string };
-type GameInitEvent = {
+export type PlayerInfo = { name: string; sessionSecretHash: string };
+export type GameInitEvent = {
   type: "system-init";
   config: GameConfig;
   seed: string;
-  players: PlayerInfo[];
 };
-type GameEvent = {
+export type GameEvent = {
   clientTimestamp: string;
   serverTimestamp: string;
   sequence: number;
-} & (
+} & GameEventData;
+
+export type GameEventData =
   | GameInitEvent
-  | { type: "player-move"; player: number; x: number; y: number }
-  | { type: "player-upgrade"; player: number; upgrade: UpgradeId }
+  | { type: "system-start-game" }
+  | { type: "system-join-player"; player: PlayerInfo }
   | { type: "system-message"; player?: number; message: string }
-);
+  | { type: "player-move"; player: number; x: number; y: number }
+  | { type: "player-upgrade"; player: number; upgrade: UpgradeId };
 export class Game {
   config = defaultGameConfig;
 
@@ -70,9 +72,15 @@ export class Game {
 
   grid: Tile[][];
   seed: string;
-  constructor(init: GameInitEvent) {
+  chainEvent: (e: GameEventData) => void;
+  constructor(
+    init: GameInitEvent,
+    players: PlayerInfo[],
+    chainEvent: (e: GameEventData) => void
+  ) {
     this.config = init.config;
-    this.players = init.players.map((info, i) => ({
+    this.chainEvent = chainEvent;
+    this.players = players.map((info, i) => ({
       info,
       state: {
         fuel: this.config.fuelSizes[0],
@@ -90,7 +98,7 @@ export class Game {
     makeAutoObservable(this);
     if (typeof window === "object") Object.assign(window, { game: this });
   }
-  applyEvent(gameEvent: GameEvent) {
+  applyEvent(gameEvent: GameEventData) {
     switch (gameEvent.type) {
       case "player-move":
         this.#clickTile(gameEvent.player, gameEvent.x, gameEvent.y);
@@ -138,7 +146,11 @@ export class Game {
     }
 
     const isDigging = this.grid[y][x].type !== "air";
-    if (isDigging && this.grid[y][x].type === "rock") {
+    if (
+      isDigging &&
+      this.grid[y][x].type === "rock" &&
+      !player.state.upgrades.includes("digger")
+    ) {
       throw new PlayerActionError("You can not dig through rock!");
     }
     if (isDigging && dY < 0) {
@@ -195,7 +207,7 @@ export class Game {
     player.state.coins += coinsGained[tgtType];
     this.grid[y][x] = { type: "air" };
     if (player.state.fuel <= 0) {
-      this.applyEvent({
+      this.chainEvent({
         type: "system-message",
         message:
           "You ran out of fuel! Your money has been forfeit in order to pay for a new digger.",
@@ -229,11 +241,13 @@ export class Game {
   #purchaseUpgrade(playerI: number, id: UpgradeId) {
     const player = this.players[playerI];
     if (player.state.y > 0)
-      throw Error("You can only purchase upgrades on the surface!");
+      throw new PlayerActionError(
+        "You can only purchase upgrades on the surface!"
+      );
     const upgrade = this.config.availableUpgrades.find((u) => u.id === id);
     if (!upgrade) throw Error("Upgrade not found!");
     if (player.state.coins < upgrade.cost) {
-      throw Error("You can not afford this upgrade!");
+      throw new PlayerActionError("You can not afford this upgrade!");
     }
     // success!
     player.state.coins -= upgrade.cost;
