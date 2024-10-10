@@ -40,9 +40,33 @@ export const defaultGameConfig = {
       id: "digger" as UpgradeId,
       name: "Durable Digger",
       description: "Allow digging through rocks",
-      cost: 100,
+      cost: 200,
     },
   ],
+  digging: {
+    fuelUsed: {
+      air: 1,
+      earth: 1,
+      copper: 2,
+      iron: 2,
+      gold: 3,
+      diamond: 5,
+      treasure: 1,
+      rock: 5,
+      lava: 0,
+    },
+    coinsGained: {
+      air: 0,
+      earth: 1,
+      rock: 0,
+      copper: 10,
+      iron: 15,
+      gold: 50,
+      diamond: 100,
+      treasure: 200,
+      lava: 30,
+    },
+  },
 };
 export type GameConfig = typeof defaultGameConfig;
 
@@ -118,51 +142,9 @@ export class Game {
       0
     );*/
     const player = this.players[playerI];
-    const dX = x - player.state.x;
-    const dY = y - player.state.y;
-    // check if player is close enough
-    if (Math.abs(dX) > 0 && Math.abs(dY) > 0) {
-      throw new PlayerActionError("You can not move diagonally!");
-    }
-    if (Math.abs(dX) + Math.abs(dY) > 1) {
-      // can move through air multiple spaces
-      // check every space on the way is air
-      const dx1 = Math.sign(dX);
-      const dy1 = Math.sign(dY);
-      let cx = player.state.x,
-        cy = player.state.y;
-      while (cx !== x || cy !== y) {
-        cx += dx1;
-        cy += dy1;
-        if (this.grid[cy][cx].type !== "air") {
-          throw new PlayerActionError("You can not fly through non-air tiles.");
-        }
-      }
-    }
-    const tgtType = this.grid[y][x].type;
-    if (tgtType === "unknown") {
-      // should not happen because tiles are revealed before
-      throw new PlayerActionError("You can not dig unknown tiles!");
-    }
 
-    const isDigging = this.grid[y][x].type !== "air";
-    if (
-      isDigging &&
-      this.grid[y][x].type === "rock" &&
-      !player.state.upgrades.includes("digger")
-    ) {
-      throw new PlayerActionError("You can not dig through rock!");
-    }
-    if (isDigging && dY < 0) {
-      throw new PlayerActionError("You can not dig upwards!");
-    }
-    if (
-      isDigging &&
-      player.state.y + 1 < this.grid.length &&
-      this.grid[player.state.y + 1][player.state.x].type === "air"
-    ) {
-      throw new PlayerActionError("You can not dig while in air!");
-    }
+    const digError = this.canDig(playerI, player, x, y);
+    if (digError) throw new PlayerActionError(digError);
     // move player to clicked position
     player.state.x = x;
     player.state.y = y;
@@ -176,35 +158,16 @@ export class Game {
 - Treasure: Digging costs 1, worth 500 coins each
 - Lave: Digging free with hull upgrade. Falls on you, kills you.
 */
-    const fuelUsed = {
-      air: 1,
-      earth: 1,
-      rock: 2,
-      copper: 2,
-      iron: 2,
-      gold: 3,
-      diamond: 5,
-      treasure: 1,
-      lava: 0,
-    };
-    const coinsGained = {
-      air: 0,
-      earth: 1,
-      rock: 0,
-      copper: 10,
-      iron: 15,
-      gold: 50,
-      diamond: 100,
-      treasure: 500,
-      lava: 0,
-    };
-
+    const tgtType = this.grid[y][x].type;
+    if (tgtType === "unknown") {
+      throw Error("caught before, impossible");
+    }
     if (y === 0) {
       player.state.fuel = this.getMaxFuel(player);
     } else {
-      player.state.fuel -= fuelUsed[tgtType];
+      player.state.fuel -= this.config.digging.fuelUsed[tgtType];
     }
-    player.state.coins += coinsGained[tgtType];
+    player.state.coins += this.config.digging.coinsGained[tgtType];
     this.grid[y][x] = { type: "air" };
     if (player.state.fuel <= 0) {
       this.chainEvent({
@@ -233,6 +196,68 @@ export class Game {
       );
       revealLayer(this, layer as 1 | 2 | 3, playerI);
     }
+  }
+  canDig(
+    playerI: number,
+    player: { state: PlayerState },
+    x: number,
+    y: number
+  ): string | null {
+    const dX = x - player.state.x;
+    const dY = y - player.state.y;
+    // check if player is close enough
+    if (Math.abs(dX) > 0 && Math.abs(dY) > 0) {
+      return "You can not move that far!";
+    }
+
+    if (Math.abs(dX) + Math.abs(dY) > 1) {
+      // can move through air multiple spaces
+      // check every space on the way is air
+      const dx1 = Math.sign(dX);
+      const dy1 = Math.sign(dY);
+      let cx = player.state.x,
+        cy = player.state.y;
+      while (cx !== x || cy !== y) {
+        cx += dx1;
+        cy += dy1;
+        if (this.grid[cy][cx].type !== "air") {
+          return "You can not fly through non-air tiles.";
+        }
+      }
+    }
+    if (
+      player.state.y === 0 &&
+      y === 0 &&
+      (x >= (playerI + 1) * this.config.tileWidthPerPlayer ||
+        x <= playerI * this.config.tileWidthPerPlayer)
+    ) {
+      return "You can not move to another player's start area";
+    }
+    const tgtType = this.grid[y][x].type;
+    if (tgtType === "unknown") {
+      // should not happen because tiles are revealed before
+      return "You can not dig unknown tiles!";
+    }
+
+    const isDigging = this.grid[y][x].type !== "air";
+    if (
+      isDigging &&
+      this.grid[y][x].type === "rock" &&
+      !player.state.upgrades.includes("digger")
+    ) {
+      return "You can not dig through rock!";
+    }
+    if (isDigging && dY < 0) {
+      return "You can not dig upwards!";
+    }
+    if (
+      isDigging &&
+      (player.state.y + 1 >= this.grid.length ||
+        this.grid[player.state.y + 1][player.state.x].type === "air")
+    ) {
+      return "You can not dig while in air!";
+    }
+    return null;
   }
   getMaxFuel(player: { state: PlayerState }): number {
     const inx = player.state.upgrades.includes("fuel") ? 1 : 0;
@@ -278,7 +303,7 @@ function emptyGrid(game: Game) {
   return grid;
 }
 function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
-  const rng = randomGenerator(game.seed + layer);
+  const rng = randomGenerator(game.seed + layer + playerI);
   const layerStartY = game.config.layerDepths
     .slice(0, layer)
     .reduce((sum, depth) => sum + depth, 0);
@@ -288,7 +313,7 @@ function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
   > = {
     1: { air: 5, copper: 2, iron: 1 },
     2: { air: 4, copper: 1, iron: 2, gold: 1, diamond: 1 },
-    3: { air: 3, gold: 2, diamond: 2, treasure: 1, lava: 1 },
+    3: { air: 3, gold: 2, diamond: 2, treasure: 1, lava: 3 },
   };
   // for each player, we add minerals according to the above counts
   const targetChoices = [];

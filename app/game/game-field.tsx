@@ -3,9 +3,9 @@ import { useMemo } from "react";
 import { Fragment } from "react/jsx-runtime";
 import { randomGenerator } from "~/util";
 import { JoinTable } from "./join-table";
-import { Tile } from "./logic";
+import { Game, Tile } from "./logic";
 import { TablePlayerSeat } from "./player";
-import { airAbove, svgs } from "./svgs";
+import { airAbove, PlayerSvg, svgs } from "./svgs";
 import { UpgradeDialog } from "./upgrade-dialog";
 
 const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
@@ -39,6 +39,7 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
       <div className="w-100 overflow-x-scroll">
         <AboveGround player={player} />
         <GroundGrid player={player} />
+        <CheatSheet game={player.game} />
         {player.upgradeDialog && <UpgradeDialog player={player} />}
 
         {player.warnings.length > 0 && (
@@ -80,21 +81,28 @@ const AboveGround: React.FC<{ player: TablePlayerSeat }> = observer((props) => {
     >
       {game.players.map((player, i) => (
         <div key={i} className="">
-          <div className="text-center">{player.info.name}</div>
-          <div>Coins: {player.state.coins}</div>
-          <div>Fuel: {player.state.fuel}</div>
-          <div>
-            Upgrades: {player.state.upgrades.join(", ")}{" "}
-            {player.state.y === 0 && i === me.playerId ? (
-              <button
-                className="border border-black p-1"
-                onClick={() => (me.upgradeDialog = true)}
-              >
-                Buy
-              </button>
-            ) : (
-              ""
-            )}
+          <div className="text-center">
+            <div className="inline-block w-8 h-8 align-bottom">
+              <PlayerSvg playerIndex={i} />
+            </div>
+            {player.info.name} {me.playerId === i ? " (you)" : ""}
+          </div>
+          <div className="ml-3">
+            <div>Coins: {player.state.coins}</div>
+            <div>Fuel: {player.state.fuel}</div>
+            <div>
+              Upgrades: {player.state.upgrades.join(", ") || "None"}{" "}
+              {player.state.y === 0 && i === me.playerId ? (
+                <button
+                  className="border border-black p-1"
+                  onClick={() => (me.upgradeDialog = true)}
+                >
+                  Buy
+                </button>
+              ) : (
+                ""
+              )}
+            </div>
           </div>
         </div>
       ))}
@@ -117,6 +125,34 @@ const GroundGrid: React.FC<{ player: TablePlayerSeat }> = observer(
     const layerSplits = game.config.layerDepths.map((d, i) =>
       game.config.layerDepths.slice(0, i + 1).reduce((a, b) => a + b, 0)
     );
+    const getDist = ({ dx, dy }: { dx: number; dy: number }) => {
+      if (player.playerId === undefined) return { distance: 0, price: 0 };
+      const p = game.players[player.playerId];
+      let x = p.state.x;
+      let y = p.state.y;
+      let price = 1;
+      let distance = 0;
+      while (true) {
+        x += dx;
+        y += dy;
+        const tile =
+          y >= 0 && y < game.grid.length ? game.grid[y][x] : undefined;
+        if (!tile) break;
+        if (game.canDig(player.playerId, p, x, y)) break;
+        distance++;
+        price =
+          tile.type === "unknown" ? 0 : game.config.digging.fuelUsed[tile.type];
+      }
+      return { distance, price };
+    };
+    const distances = [
+      { dx: -1, dy: 0 },
+      { dx: 1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: 0, dy: -1 },
+    ]
+      .map((d) => ({ ...d, ...getDist(d) }))
+      .filter((d) => d.distance > 0);
     return (
       <div
         className={`grid relative`}
@@ -151,6 +187,7 @@ const GroundGrid: React.FC<{ player: TablePlayerSeat }> = observer(
         {game.players.map((p, i) => (
           <PlayerView
             key={i}
+            playerIndex={i}
             name={p.info.name + (i === player.playerId ? " (you)" : "")}
             x={p.state.x}
             y={p.state.y}
@@ -159,6 +196,7 @@ const GroundGrid: React.FC<{ player: TablePlayerSeat }> = observer(
               const inx = layerSplits.findIndex((d) => d > p.state.y);
               return inx >= 0 ? inx : layerSplits.length;
             })()}
+            distances={i === player.playerId ? distances : []}
           />
         ))}
       </div>
@@ -176,18 +214,28 @@ function TileView({ tile, x, y }: { tile: Tile; x: number; y: number }) {
   );
   return <>{svg}</>;
 }
+type DistanceHint = {
+  dx: number;
+  dy: number;
+  distance: number;
+  price: number;
+};
 
 function PlayerView({
   x,
   y,
   yOffset,
   fuelWarning,
+  playerIndex,
+  distances,
 }: {
   name: string;
   x: number;
   y: number;
   yOffset: number;
   fuelWarning: boolean;
+  playerIndex: number;
+  distances: DistanceHint[];
 }) {
   return (
     <div
@@ -199,36 +247,106 @@ function PlayerView({
         height: tileSize,
       }}
     >
-      {playerSvg}
+      <PlayerSvg playerIndex={playerIndex} />
       {fuelWarning && <div className="absolute inset-0 text-red-700">⚠</div>}
+      <svg
+        className="absolute inset-0"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        overflow="visible"
+        style={{ pointerEvents: "none" }}
+      >
+        <defs>
+          {/*<!-- A marker to be used as an arrowhead -->*/}
+          <marker
+            id="arrow"
+            viewBox="0 0 10 10"
+            refX="5"
+            refY="5"
+            markerWidth="8"
+            markerHeight="8"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" />
+          </marker>
+        </defs>
+
+        {distances.map((d, i) => (
+          <LineArrow key={i} {...d} />
+        ))}
+      </svg>
     </div>
   );
 }
-const playerSvg = (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-    {/*<!-- Wheels (4 wheels) -->*/}
-    <circle cx="4" cy="17" r="1.5" fill="black" />
-    <circle cx="8" cy="17" r="1.5" fill="black" />
-    <circle cx="12" cy="17" r="1.5" fill="black" />
-    <circle cx="16" cy="17" r="1.5" fill="black" />
 
-    {/*<!-- Machine body -->*/}
-    <rect x="2" y="14" width="16" height="2" fill="gray" />
+function LineArrow({ dx, dy, distance, price }: DistanceHint) {
+  const textOffset = 0.07;
+  return (
+    <>
+      {" "}
+      <line
+        x1={10 + dx * 5}
+        y1={10 + dy * 5}
+        x2={10 + dx * 20 * distance}
+        y2={10 + dy * 20 * distance}
+        stroke="black"
+        markerEnd="url(#arrow)"
+      />
+      {/*<circle
+        cx={10 + dx * 20 * (distance - textOffset)}
+        cy={10 + dy * 20 * (distance - textOffset)}
+        r={4}
+        fill="black"
+      />*/}
+      <text
+        x={10 + dx * 20 * (distance - textOffset)}
+        y={10 + dy * 20 * (distance - textOffset)}
+        fontSize={4}
+        fill={"white"}
+        textAnchor="middle"
+        dominantBaseline={"middle"}
+      >
+        {price}
+      </text>
+    </>
+  );
+}
 
-    {/*<!-- Dome -->*/}
-    <path d="M4 14 A 6 6 0 0 1 16 14" fill="blue" />
-
-    {/*<!-- Window -->*/}
-    <path d="M11 8 Q15 8 15 12 L15 14 Q11 14 11 10 Z" fill="lightblue" />
-
-    {/*<!-- Pole for propeller -->*/}
-    <rect x="9.5" y="5" width="1" height="3" fill="gray" />
-
-    {/*<!-- Propeller (squished horizontally, centered on top of pole) -->*/}
-    <g transform="translate(10 5)">
-      <ellipse rx="6" ry="0.6" fill="gray" transform="rotate(10)" />
-      <ellipse rx="5.8" ry="0.5" fill="lightgray" transform="rotate(160)" />
-      <ellipse rx="5.6" ry="0.4" fill="darkgray" transform="rotate(190)" />
-    </g>
-  </svg>
-);
+function CheatSheet(props: { game: Game }) {
+  return (
+    <>
+      Cheat Sheet
+      <div className="grid grid-cols-3 max-w-[20rem]">
+        <div>Tile</div>
+        <div>Dig Cost</div>
+        <div>Value</div>
+        {(
+          Object.entries(props.game.config.digging.fuelUsed) as [
+            Tile["type"],
+            number
+          ][]
+        ).map(([mineral, cost], i) => (
+          <>
+            <div>
+              <div className="w-8 h-8 inline-block align-middle">
+                <TileView tile={{ type: mineral }} x={i} y={1} />
+              </div>
+              <div className="inline-block">
+                {mineral.replace(/^./, (e) => e.toLocaleUpperCase())}
+              </div>
+            </div>
+            <div>{cost} fuel</div>
+            <div>
+              {
+                props.game.config.digging.coinsGained[
+                  mineral as keyof typeof props.game.config.digging.coinsGained
+                ]
+              }{" "}
+              coins
+            </div>
+          </>
+        ))}
+      </div>
+    </>
+  );
+}

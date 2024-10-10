@@ -8,7 +8,7 @@ export function JoinTable(props: { tableId?: string }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const server =
-    params.get("server") ?? new URL("/server", window.location.href);
+    params.get("server") ?? new URL("/server", window.location.href).toString();
   const [name, setName] = useLocalStorage("playerName", () => "");
   const [sessionSecret, sessionSecretHash] = usePlayerSessionSecret();
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +17,7 @@ export function JoinTable(props: { tableId?: string }) {
       Enter your name:
       <input
         className="border border-blue-500"
-        value={name}
+        value={name ?? ""}
         pattern="[A-Za-z0-9\-_\.]{3,20}"
         onChange={(e) => setName(e.target.value)}
         title="username must be 3-20 characters long and contain only letters, numbers, and -_."

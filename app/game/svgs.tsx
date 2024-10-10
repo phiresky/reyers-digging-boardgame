@@ -15,6 +15,47 @@ export const airAbove = (
   </svg>
 );
 
+const playerColors = [
+  "blue",
+  "green",
+  "yellow",
+  "purple",
+  "gray",
+  "black",
+  "red",
+];
+export const PlayerSvg = ({ playerIndex }: { playerIndex: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+    {/*<!-- Wheels (4 wheels) -->*/}
+    <circle cx="4" cy="17" r="1.5" fill="black" />
+    <circle cx="8" cy="17" r="1.5" fill="black" />
+    <circle cx="12" cy="17" r="1.5" fill="black" />
+    <circle cx="16" cy="17" r="1.5" fill="black" />
+
+    {/*<!-- Machine body -->*/}
+    <rect x="2" y="14" width="16" height="2" fill="gray" />
+
+    {/*<!-- Dome -->*/}
+    <path
+      d="M4 14 A 6 6 0 0 1 16 14"
+      fill={playerColors[playerIndex % playerColors.length]}
+    />
+
+    {/*<!-- Window -->*/}
+    <path d="M11 8 Q15 8 15 12 L15 14 Q11 14 11 10 Z" fill="lightblue" />
+
+    {/*<!-- Pole for propeller -->*/}
+    <rect x="9.5" y="5" width="1" height="3" fill="gray" />
+
+    {/*<!-- Propeller (squished horizontally, centered on top of pole) -->*/}
+    <g transform="translate(10 5)">
+      <ellipse rx="6" ry="0.6" fill="gray" transform="rotate(10)" />
+      <ellipse rx="5.8" ry="0.5" fill="lightgray" transform="rotate(160)" />
+      <ellipse rx="5.6" ry="0.4" fill="darkgray" transform="rotate(190)" />
+    </g>
+  </svg>
+);
+
 // Common function to create random ellipses
 const createRandomEllipses = (
   rng: () => number,

@@ -35,7 +35,7 @@ export class TablePlayerSeat {
       console.log("sse event", e);
       const event = JSON.parse(e.data) as GameEvent;
       if (this.events.length !== event.sequence) {
-        this.warnings.push("Event sequence mismatch");
+        this.warnings.push("Event sequence mismatch (reload page!)");
       }
       this.events.push(event);
       this.localApplyEvent(event);
@@ -64,7 +64,8 @@ export class TablePlayerSeat {
         });
       });
     } else if (event.type === "system-message") {
-      this.warnings.push(event.message);
+      if (event.player === undefined || event.player === this.playerId)
+        this.warnings.push(event.message);
     } else if (this.game) {
       this.game.applyEvent(event);
     } else {

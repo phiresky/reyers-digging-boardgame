@@ -74,3 +74,16 @@ Then, the player may dig into the ground.
 While no player has upgraded their stone, each turn is simultaneous. After that, the stone upgraders play last (in order).
 
 Each turn consists of a sequence of moves and digs, hopefully returning to the base before running out of fuel.
+
+## todo:
+
+- [x] can not move to other players starting location
+- [x] fuel run out screen only one player
+- [x] random ground different for everyone
+- [x] treasure less valuable
+- [x] different player colors
+- wrong layer revealed if player is in wrong field
+- make other players blocking when in the way (?)
+- need wait for other players for exploration
+- starting location bidding
+-
