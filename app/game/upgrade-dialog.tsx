@@ -1,12 +1,10 @@
 import { observer } from "mobx-react-lite";
-import { Game, UpgradeId } from "./logic";
+import { PlayerState } from "./player";
 
 export const UpgradeDialog: React.FC<{
-  game: Game;
-  purchased: string[];
-  onClose: () => void;
-  onPurchase: (upgradeId: UpgradeId) => void;
-}> = observer(({ game, onClose, purchased, onPurchase }) => {
+  player: PlayerState;
+}> = observer(({ player }) => {
+  const purchased = player.game.players[player.playerId].state.upgrades;
   // for each upgrade, display a header and description below with a buy button, if already bought gray it out and add purchased text
   return (
     <div className="fixed flex h-screen top-0 left-0 w-screen">
@@ -14,12 +12,15 @@ export const UpgradeDialog: React.FC<{
         <div className="bg-white p-4">
           <div className="flex justify-between">
             <h1 className="text-2xl">Upgrades</h1>
-            <button className="border border-black p-1" onClick={onClose}>
+            <button
+              className="border border-black p-1"
+              onClick={() => (player.upgradeDialog = false)}
+            >
               Close
             </button>
           </div>
           <div className="grid">
-            {game.config.availableUpgrades.map((upgrade) => (
+            {player.game.config.availableUpgrades.map((upgrade) => (
               <div
                 key={upgrade.id}
                 className={`my-2 ${
@@ -33,7 +34,7 @@ export const UpgradeDialog: React.FC<{
                 <button
                   className="border border-black p-1"
                   disabled={purchased.includes(upgrade.id)}
-                  onClick={() => onPurchase(upgrade.id)}
+                  onClick={() => player.purchaseUpgrade(upgrade.id)}
                 >
                   {purchased.includes(upgrade.id)
                     ? "Purchased"

@@ -4,34 +4,28 @@ import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
 import { airAbove, svgs } from "./svgs";
 import { UpgradeDialog } from "./upgrade-dialog";
+import { randomGenerator } from "~/util";
+import { PlayerState } from "./player";
 
-const GameField: React.FC<{ game: Game }> = observer(({ game }) => {
-  const iAm = 0;
+const GameField: React.FC<{ player: PlayerState }> = observer(({ player }) => {
   return (
     <div className="w-100">
-      <AboveGround game={game} />
-      <GroundGrid game={game} />
-      {game.warnings.length > 0 && (
+      <AboveGround player={player} />
+      <GroundGrid player={player} />
+      {player.warnings.length > 0 && (
         <div className="fixed flex h-screen top-0 left-0 w-screen">
           <div className="m-auto bg-gray-400 border-black text-red-500 p-2">
-            <p>{game.warnings[0]}</p>
+            <p>{player.warnings[0]}</p>
             <button
               className="text-black bg-white p-2 mx-auto block"
-              onClick={() => game.warnings.shift()}
+              onClick={() => player.warnings.shift()}
             >
               OK
             </button>
           </div>
         </div>
       )}
-      {game.upgradeDialog && (
-        <UpgradeDialog
-          game={game}
-          purchased={game.players[iAm].state.upgrades}
-          onClose={() => (game.upgradeDialog = false)}
-          onPurchase={(id) => game.purchaseUpgrade(iAm, id)}
-        />
-      )}
+      {player.upgradeDialog && <UpgradeDialog player={player} />}
     </div>
   );
 });
@@ -41,8 +35,9 @@ const tileSize = "3rem";
 const fr = (width: number) => ({
   gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
 });
-const AboveGround: React.FC<{ game: Game }> = observer((props) => {
-  const game = props.game;
+const AboveGround: React.FC<{ player: PlayerState }> = observer((props) => {
+  const me = props.player;
+  const game = me.game;
   return (
     <div
       className={`grid bg-blue-300`}
@@ -60,10 +55,10 @@ const AboveGround: React.FC<{ game: Game }> = observer((props) => {
           <div>Fuel: {player.state.fuel}</div>
           <div>
             Upgrades: {player.state.upgrades.join(", ")}{" "}
-            {player.state.y === 0 ? (
+            {player.state.y === 0 && i === me.playerId ? (
               <button
                 className="border border-black p-1"
-                onClick={() => (game.upgradeDialog = true)}
+                onClick={() => (me.upgradeDialog = true)}
               >
                 Buy
               </button>
@@ -81,13 +76,14 @@ const layerBorder = {
   tailwind: "h-1",
   css: "0.25rem",
 };
-const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
+const GroundGrid: React.FC<{ player: PlayerState }> = observer(({ player }) => {
+  const game = player.game;
   // game consists of a grid of width playercount*5 and he^ight 12.
   const width = game.players.length * game.config.tileWidthPerPlayer;
 
   // cumulative sum of lyaer depths
-  const layerSplits = game.layerDepths.map((d, i) =>
-    game.layerDepths.slice(0, i + 1).reduce((a, b) => a + b, 0)
+  const layerSplits = game.config.layerDepths.map((d, i) =>
+    game.config.layerDepths.slice(0, i + 1).reduce((a, b) => a + b, 0)
   );
   return (
     <div
@@ -109,9 +105,9 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
               key={x}
               className=""
               style={{ width: tileSize, height: tileSize }}
-              onClick={() => game.clickTile(x, y)}
+              onClick={() => player.clickTile(x, y)}
             >
-              <TileView tile={tile} y={y} />
+              <TileView tile={tile} x={x} y={y} />
             </button>
           ))}
         </Fragment>
@@ -137,10 +133,13 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
   );
 });
 
-function TileView({ tile, y }: { tile: Tile; y: number }) {
+function TileView({ tile, x, y }: { tile: Tile; x: number; y: number }) {
   const svg = useMemo(
-    () => (y === 0 /*&& tile.type === "air"*/ ? airAbove : svgs[tile.type]?.()),
-    [tile.type, y]
+    () =>
+      y === 0 /*&& tile.type === "air"*/
+        ? airAbove
+        : svgs[tile.type]?.(randomGenerator(x + "." + y)),
+    [tile.type, x, y]
   );
   return <>{svg}</>;
 }

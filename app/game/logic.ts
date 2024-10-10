@@ -1,6 +1,15 @@
 import { makeAutoObservable } from "mobx";
 import { randomGenerator } from "~/util";
 
+class PlayerActionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlayerActionError";
+  }
+  toJSON() {
+    return { type: "error", message: this.message };
+  }
+}
 export type UpgradeId = "storage" | "fuel" | "digger";
 type PlayerState = {
   fuel: number;
@@ -9,56 +18,71 @@ type PlayerState = {
   x: number;
   y: number;
 };
-export class Game {
-  config = {
-    tileWidthPerPlayer: 6,
-    fuelSizes: [10, 20],
-    availableUpgrades: [
-      {
-        id: "fuel" as UpgradeId,
-        name: "Big Tank",
-        description: "Increase your gas tank from 10 to 20.",
-        cost: 30,
-      },
-      {
-        id: "storage" as UpgradeId,
-        name: "Big Cargo Bay",
-        description: "Allow carrying four instead of two minerals",
-        cost: 30,
-      },
-      {
-        id: "digger" as UpgradeId,
-        name: "Durable Digger",
-        description: "Allow digging through rocks",
-        cost: 100,
-      },
-    ],
-  };
-
-  players: { info: { name: string }; state: PlayerState }[] = [
-    "Frank",
-    "Joyce",
-    "Flonk",
-    "Boar",
-  ].map((name, i) => ({
-    info: { name },
-    state: {
-      fuel: this.config.fuelSizes[0],
-      coins: 10,
-      upgrades: [],
-      x: i * this.config.tileWidthPerPlayer + 3,
-      y: 0,
+export const defaultGameConfig = {
+  tileWidthPerPlayer: 6,
+  fuelSizes: [10, 20],
+  // how many rows each layer has (the first layer is the air above ground)
+  layerDepths: [1, 5, 4, 4],
+  availableUpgrades: [
+    {
+      id: "fuel" as UpgradeId,
+      name: "Big Tank",
+      description: "Increase your gas tank from 10 to 20.",
+      cost: 30,
     },
-  }));
+    {
+      id: "storage" as UpgradeId,
+      name: "Big Cargo Bay",
+      description: "Allow carrying four instead of two minerals",
+      cost: 30,
+    },
+    {
+      id: "digger" as UpgradeId,
+      name: "Durable Digger",
+      description: "Allow digging through rocks",
+      cost: 100,
+    },
+  ],
+};
+export type GameConfig = typeof defaultGameConfig;
+
+type PlayerInfo = { name: string };
+type GameInitEvent = {
+  type: "system-init";
+  config: GameConfig;
+  seed: string;
+  players: PlayerInfo[];
+};
+type GameEvent = {
+  clientTimestamp: string;
+  serverTimestamp: string;
+  sequence: number;
+} & (
+  | GameInitEvent
+  | { type: "player-move"; player: number; x: number; y: number }
+  | { type: "player-upgrade"; player: number; upgrade: UpgradeId }
+  | { type: "system-message"; player?: number; message: string }
+);
+export class Game {
+  config = defaultGameConfig;
+
+  players: { info: PlayerInfo; state: PlayerState }[];
 
   grid: Tile[][];
-  seed = "Hello";
-  // how many rows each of the layers has
-  layerDepths = [1, 5, 4, 4];
-  warnings: string[] = [];
-  upgradeDialog: boolean = false;
-  constructor(seed: string) {
-    this.seed = seed;
+  seed: string;
+  constructor(init: GameInitEvent) {
+    this.config = init.config;
+    this.players = init.players.map((info, i) => ({
+      info,
+      state: {
+        fuel: this.config.fuelSizes[0],
+        coins: 10,
+        upgrades: [],
+        x: i * this.config.tileWidthPerPlayer + 3,
+        y: 0,
+      },
+    }));
+    this.seed = init.seed;
     this.grid = emptyGrid(this);
     for (let i = 0; i < this.players.length; i++) {
       revealLayer(this, 1, i);
@@ -66,23 +90,31 @@ export class Game {
     makeAutoObservable(this);
     if (typeof window === "object") Object.assign(window, { game: this });
   }
-
-  clickTile(x: number, y: number) {
-    // find nearest player
+  applyEvent(gameEvent: GameEvent) {
+    switch (gameEvent.type) {
+      case "player-move":
+        this.#clickTile(gameEvent.player, gameEvent.x, gameEvent.y);
+        break;
+      case "player-upgrade":
+        this.#purchaseUpgrade(gameEvent.player, gameEvent.upgrade);
+        break;
+    }
+  }
+  #clickTile(playerI: number, x: number, y: number) {
+    /*// find nearest player
     const playerI = this.players.reduce(
       (bestI, pos, i) =>
         Math.abs(pos.state.x - x) < Math.abs(this.players[bestI].state.x - x)
           ? i
           : bestI,
       0
-    );
+    );*/
     const player = this.players[playerI];
     const dX = x - player.state.x;
     const dY = y - player.state.y;
     // check if player is close enough
     if (Math.abs(dX) > 0 && Math.abs(dY) > 0) {
-      this.warn("You can not move diagonally!");
-      return;
+      throw new PlayerActionError("You can not move diagonally!");
     }
     if (Math.abs(dX) + Math.abs(dY) > 1) {
       // can move through air multiple spaces
@@ -95,47 +127,29 @@ export class Game {
         cx += dx1;
         cy += dy1;
         if (this.grid[cy][cx].type !== "air") {
-          this.warn("You can not fly through non-air tiles.");
-          return;
+          throw new PlayerActionError("You can not fly through non-air tiles.");
         }
       }
     }
     const tgtType = this.grid[y][x].type;
     if (tgtType === "unknown") {
-      this.warn("You can not dig unknown tiles!");
-      return;
+      // should not happen because tiles are revealed before
+      throw new PlayerActionError("You can not dig unknown tiles!");
     }
-    /*// find out which layer playre is digging into
-      const layer = this.layerDepths.findIndex(
-        (depth, layer) =>
-          y >=
-            this.layerDepths
-              .slice(0, layer)
-              .reduce((sum, depth) => sum + depth, 0) &&
-          y <
-            this.layerDepths
-              .slice(0, layer + 1)
-              .reduce((sum, depth) => sum + depth, 0)
-      );
-      revealLayer(this, layer as 1 | 2 | 3, playerI);
-      return;
-    }*/
+
     const isDigging = this.grid[y][x].type !== "air";
     if (isDigging && this.grid[y][x].type === "rock") {
-      this.warn("You can not dig through rock!");
-      return;
+      throw new PlayerActionError("You can not dig through rock!");
     }
     if (isDigging && dY < 0) {
-      this.warn("You can not dig upwards!");
-      return;
+      throw new PlayerActionError("You can not dig upwards!");
     }
     if (
       isDigging &&
       player.state.y + 1 < this.grid.length &&
       this.grid[player.state.y + 1][player.state.x].type === "air"
     ) {
-      this.warn("You can not dig while in air!");
-      return;
+      throw new PlayerActionError("You can not dig while in air!");
     }
     // move player to clicked position
     player.state.x = x;
@@ -181,9 +195,12 @@ export class Game {
     player.state.coins += coinsGained[tgtType];
     this.grid[y][x] = { type: "air" };
     if (player.state.fuel <= 0) {
-      this.warn(
-        "You ran out of fuel! Your money has been forfeit in order to pay for a new digger."
-      );
+      this.applyEvent({
+        type: "system-message",
+        message:
+          "You ran out of fuel! Your money has been forfeit in order to pay for a new digger.",
+        player: playerI,
+      });
       player.state.y = 0;
       player.state.coins = 0;
       player.state.fuel = this.getMaxFuel(player);
@@ -191,14 +208,14 @@ export class Game {
     if (y < this.grid.length - 1 && this.grid[y + 1][x].type === "unknown") {
       // this.warn("You can not dig unknown tiles!");
       // find out which layer playre is digging into
-      const layer = this.layerDepths.findIndex(
+      const layer = this.config.layerDepths.findIndex(
         (depth, layer) =>
           y + 1 >=
-            this.layerDepths
+            this.config.layerDepths
               .slice(0, layer)
               .reduce((sum, depth) => sum + depth, 0) &&
           y + 1 <
-            this.layerDepths
+            this.config.layerDepths
               .slice(0, layer + 1)
               .reduce((sum, depth) => sum + depth, 0)
       );
@@ -209,10 +226,7 @@ export class Game {
     const inx = player.state.upgrades.includes("fuel") ? 1 : 0;
     return this.config.fuelSizes[inx];
   }
-  warn(message: string) {
-    this.warnings.push(message);
-  }
-  purchaseUpgrade(playerI: number, id: UpgradeId) {
+  #purchaseUpgrade(playerI: number, id: UpgradeId) {
     const player = this.players[playerI];
     if (player.state.y > 0)
       throw Error("You can only purchase upgrades on the surface!");
@@ -232,7 +246,7 @@ function emptyGrid(game: Game) {
   const grid: Tile[][] = [];
   const width = game.players.length * game.config.tileWidthPerPlayer;
 
-  for (const [layerI, layerDepth] of game.layerDepths.entries()) {
+  for (const [layerI, layerDepth] of game.config.layerDepths.entries()) {
     for (let y = 0; y < layerDepth; y++) {
       const row: Tile[] = [];
       for (let x = 0; x < width; x++) {
@@ -251,7 +265,7 @@ function emptyGrid(game: Game) {
 }
 function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
   const rng = randomGenerator(game.seed + layer);
-  const layerStartY = game.layerDepths
+  const layerStartY = game.config.layerDepths
     .slice(0, layer)
     .reduce((sum, depth) => sum + depth, 0);
   const mineralCountsPerLayer: Record<
@@ -266,7 +280,11 @@ function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
   const targetChoices = [];
   const minX = playerI * game.config.tileWidthPerPlayer + 1;
   const maxX = minX + game.config.tileWidthPerPlayer - 1;
-  for (let y = layerStartY; y < layerStartY + game.layerDepths[layer]; y++) {
+  for (
+    let y = layerStartY;
+    y < layerStartY + game.config.layerDepths[layer];
+    y++
+  ) {
     for (let x = minX; x < maxX; x++) {
       game.grid[y][x] = { type: "earth" };
       targetChoices.push(game.grid[y][x]);
