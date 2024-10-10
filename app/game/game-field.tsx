@@ -36,13 +36,13 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
         </div>
       );
     return (
-      <div className="w-100">
+      <div className="w-100 overflow-x-scroll">
         <AboveGround player={player} />
         <GroundGrid player={player} />
         {player.upgradeDialog && <UpgradeDialog player={player} />}
 
         {player.warnings.length > 0 && (
-          <div className="fixed flex h-screen top-0 left-0 w-screen">
+          <div className="fixed flex h-screen top-0 left-0 w-screen bg-black bg-opacity-40">
             <div className="m-auto bg-gray-400 border-black text-red-500 p-2">
               <p>{player.warnings[0]}</p>
               <button

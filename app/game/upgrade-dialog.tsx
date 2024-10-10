@@ -8,7 +8,7 @@ export const UpgradeDialog: React.FC<{
   const purchased = player.game.players[player.playerId].state.upgrades;
   // for each upgrade, display a header and description below with a buy button, if already bought gray it out and add purchased text
   return (
-    <div className="fixed flex h-screen top-0 left-0 w-screen">
+    <div className="fixed flex h-screen top-0 left-0 w-screen bg-black bg-opacity-40">
       <div className="m-auto bg-gray-400 border-black p-2">
         <div className="bg-white p-4">
           <div className="flex justify-between">
