@@ -5,13 +5,15 @@ export function useLocalStorage<T>(
   id: string,
   init: () => T
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState(null);
+  const [value, setValue] = useState<null | T>(null);
 
   // synchronize initially
   useLayoutEffect(() => {
     const newValue = window.localStorage.getItem(id);
     if (newValue !== null) {
       setValue(JSON.parse(newValue));
+    } else {
+      setValue(init());
     }
   }, [id]);
 
@@ -19,7 +21,7 @@ export function useLocalStorage<T>(
   useEffect(() => {
     if (value !== null) window.localStorage.setItem(id, JSON.stringify(value));
   }, [id, value]);
-  return [value ?? init(), setValue as React.Dispatch<React.SetStateAction<T>>];
+  return [value!, setValue as React.Dispatch<React.SetStateAction<T>>];
 }
 
 export function usePlayerSessionSecret() {
