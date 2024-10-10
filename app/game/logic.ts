@@ -1,14 +1,11 @@
 import { makeAutoObservable } from "mobx";
 import { randomGenerator } from "~/util";
 
+export type UpgradeId = "storage" | "fuel" | "digger";
 type PlayerState = {
   fuel: number;
   coins: number;
-  upgrades: {
-    hull: number;
-    digger: number;
-    tank: number;
-  };
+  upgrades: UpgradeId[];
   x: number;
   y: number;
 };
@@ -16,6 +13,26 @@ export class Game {
   config = {
     tileWidthPerPlayer: 6,
     fuelSizes: [10, 20],
+    availableUpgrades: [
+      {
+        id: "fuel" as UpgradeId,
+        name: "Big Tank",
+        description: "Increase your gas tank from 10 to 20.",
+        cost: 30,
+      },
+      {
+        id: "storage" as UpgradeId,
+        name: "Big Cargo Bay",
+        description: "Allow carrying four instead of two minerals",
+        cost: 30,
+      },
+      {
+        id: "digger" as UpgradeId,
+        name: "Durable Digger",
+        description: "Allow digging through rocks",
+        cost: 100,
+      },
+    ],
   };
 
   players: { info: { name: string }; state: PlayerState }[] = [
@@ -28,7 +45,7 @@ export class Game {
     state: {
       fuel: this.config.fuelSizes[0],
       coins: 10,
-      upgrades: { hull: 0, digger: 0, tank: 0 },
+      upgrades: [],
       x: i * this.config.tileWidthPerPlayer + 3,
       y: 0,
     },
@@ -37,11 +54,12 @@ export class Game {
   grid: Tile[][];
   seed = "Hello";
   // how many rows each of the layers has
-  layerDepths = [1, 5, 4, 3];
+  layerDepths = [1, 5, 4, 4];
   warnings: string[] = [];
+  upgradeDialog: boolean = false;
   constructor(seed: string) {
     this.seed = seed;
-    this.grid = randomGrid2(this);
+    this.grid = emptyGrid(this);
     for (let i = 0; i < this.players.length; i++) {
       revealLayer(this, 1, i);
     }
@@ -83,9 +101,11 @@ export class Game {
       }
     }
     const tgtType = this.grid[y][x].type;
-    /*if (tgtType === "unknown") {
-      // this.warn("You can not dig unknown tiles!");
-      // find out which layer playre is digging into
+    if (tgtType === "unknown") {
+      this.warn("You can not dig unknown tiles!");
+      return;
+    }
+    /*// find out which layer playre is digging into
       const layer = this.layerDepths.findIndex(
         (depth, layer) =>
           y >=
@@ -154,12 +174,20 @@ export class Game {
     };
 
     if (y === 0) {
-      player.state.fuel = this.config.fuelSizes[player.state.upgrades.tank];
+      player.state.fuel = this.getMaxFuel(player);
     } else {
       player.state.fuel -= fuelUsed[tgtType];
     }
     player.state.coins += coinsGained[tgtType];
     this.grid[y][x] = { type: "air" };
+    if (player.state.fuel <= 0) {
+      this.warn(
+        "You ran out of fuel! Your money has been forfeit in order to pay for a new digger."
+      );
+      player.state.y = 0;
+      player.state.coins = 0;
+      player.state.fuel = this.getMaxFuel(player);
+    }
     if (y < this.grid.length - 1 && this.grid[y + 1][x].type === "unknown") {
       // this.warn("You can not dig unknown tiles!");
       // find out which layer playre is digging into
@@ -177,13 +205,30 @@ export class Game {
       revealLayer(this, layer as 1 | 2 | 3, playerI);
     }
   }
+  getMaxFuel(player: { state: PlayerState }): number {
+    const inx = player.state.upgrades.includes("fuel") ? 1 : 0;
+    return this.config.fuelSizes[inx];
+  }
   warn(message: string) {
     this.warnings.push(message);
   }
+  purchaseUpgrade(playerI: number, id: UpgradeId) {
+    const player = this.players[playerI];
+    if (player.state.y > 0)
+      throw Error("You can only purchase upgrades on the surface!");
+    const upgrade = this.config.availableUpgrades.find((u) => u.id === id);
+    if (!upgrade) throw Error("Upgrade not found!");
+    if (player.state.coins < upgrade.cost) {
+      throw Error("You can not afford this upgrade!");
+    }
+    // success!
+    player.state.coins -= upgrade.cost;
+    player.state.upgrades.push(id);
+    if (id === "fuel") player.state.fuel = this.getMaxFuel(player);
+  }
 }
 
-function randomGrid2(game: Game) {
-  const rng = randomGenerator(game.seed);
+function emptyGrid(game: Game) {
   const grid: Tile[][] = [];
   const width = game.players.length * game.config.tileWidthPerPlayer;
 
@@ -240,7 +285,7 @@ function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
   }
 }
 
-function randomGrid(game: Game) {
+/*function randomGrid(game: Game) {
   const rng = randomGenerator(game.seed);
   // between each player, there is a column of rock.
   // other than that, distribution depends on randomTile per layer.
@@ -260,7 +305,7 @@ function randomGrid(game: Game) {
     }
   }
   return grid;
-}
+}*/
 
 /**
  * 
@@ -290,7 +335,7 @@ export type Tile = {
 
 /**
  * Air is distributed evenly through all layers. On the first layer, there's mostly earth, with some copper and iron. On the second layer, there is more iron and copper, and additionally some gold and diamond. On the third layer, there's more diamond and gold, and also some lava  and maybe treasure.
- */
+ 
 function randomTile(rng: () => number, layer: 0 | 1 | 2 | 3): Tile {
   const weights = {
     0: { air: 1 },
@@ -338,3 +383,4 @@ function randomTile(rng: () => number, layer: 0 | 1 | 2 | 3): Tile {
   }
   throw Error("impossible");
 }
+*/

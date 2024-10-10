@@ -2,8 +2,11 @@ import { Fragment } from "react/jsx-runtime";
 import { Game, Tile } from "./logic";
 import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
+import { airAbove, svgs } from "./svgs";
+import { UpgradeDialog } from "./upgrade-dialog";
 
 const GameField: React.FC<{ game: Game }> = observer(({ game }) => {
+  const iAm = 0;
   return (
     <div className="w-100">
       <AboveGround game={game} />
@@ -20,6 +23,14 @@ const GameField: React.FC<{ game: Game }> = observer(({ game }) => {
             </button>
           </div>
         </div>
+      )}
+      {game.upgradeDialog && (
+        <UpgradeDialog
+          game={game}
+          purchased={game.players[iAm].state.upgrades}
+          onClose={() => (game.upgradeDialog = false)}
+          onPurchase={(id) => game.purchaseUpgrade(iAm, id)}
+        />
       )}
     </div>
   );
@@ -48,9 +59,14 @@ const AboveGround: React.FC<{ game: Game }> = observer((props) => {
           <div>Coins: {player.state.coins}</div>
           <div>Fuel: {player.state.fuel}</div>
           <div>
-            Upgrades: {player.state.upgrades.digger ? "Digger" : ""}{" "}
+            Upgrades: {player.state.upgrades.join(", ")}{" "}
             {player.state.y === 0 ? (
-              <button className="border border-black p-1">Buy</button>
+              <button
+                className="border border-black p-1"
+                onClick={() => (game.upgradeDialog = true)}
+              >
+                Buy
+              </button>
             ) : (
               ""
             )}
@@ -123,8 +139,7 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
 
 function TileView({ tile, y }: { tile: Tile; y: number }) {
   const svg = useMemo(
-    () =>
-      y === 0 /*&& tile.type === "air"*/ ? airAbove() : svgs[tile.type]?.(),
+    () => (y === 0 /*&& tile.type === "air"*/ ? airAbove : svgs[tile.type]?.()),
     [tile.type, y]
   );
   return <>{svg}</>;
@@ -185,227 +200,3 @@ const playerSvg = (
     </g>
   </svg>
 );
-const airAbove = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <rect width="20" height="20" fill={"#93C5FD"} />
-  </svg>
-);
-// all svgs have native size of 20px times 20px
-const svgs: { [t in Tile["type"]]: () => JSX.Element } = {
-  // air is just shown as a dark gray background
-  air: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill={"#333"} />
-    </svg>
-  ),
-  // earth is a brown square background with a few small random rocks (eclipses) in gray
-  earth: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#8B4513" />
-      {[...Array(5)].map((_, i) => (
-        <ellipse
-          key={i}
-          cx={Math.random() * 20}
-          cy={Math.random() * 20}
-          rx={Math.random() * 2}
-          ry={Math.random() * 2}
-          fill="#888"
-        />
-      ))}
-    </svg>
-  ),
-  // rock is a gray square background with a few small random rocks (eclipses) in black
-  rock: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#555" />
-      {[...Array(5)].map((_, i) => (
-        <ellipse
-          key={i}
-          cx={Math.random() * 20}
-          cy={Math.random() * 20}
-          rx={Math.random() * 2}
-          ry={Math.random() * 2}
-          fill="#333"
-        />
-      ))}
-    </svg>
-  ),
-  // copper is shown as a earth-colored background with larger bronze-colored rocks
-  copper: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#8B4513" />
-      {[...Array(5)].map((_, i) => {
-        // each rock is a random polygon with five edges
-        const r = Math.random() * 3 + 3;
-        const x = Math.random() * (20 - 2 * r) + r;
-        const y = Math.random() * (20 - 2 * r) + r;
-        const points = [...Array(5)].map((_, i) => {
-          const a = (Math.PI * 2 * i) / 5;
-          // move each point a bit randomly outwards or inwards
-
-          // return `${x + Math.cos(a) * r},${y + Math.sin(a) * r}`;
-          return `${x + Math.cos(a) * (r + Math.random() * 2 - 1)},${
-            y + Math.sin(a) * (r + Math.random() * 2 - 1)
-          }`;
-        });
-        return <polygon key={i} points={points.join(" ")} fill="#CB6D51" />;
-      })}
-    </svg>
-  ),
-  // iron is shown as a earth-colored background with larger silver-colored rocks
-  iron: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#8B4513" />
-      {[...Array(5)].map((_, i) => {
-        // each rock is a random polygon with five edges
-        const r = Math.random() * 3 + 3;
-        const x = Math.random() * (20 - 2 * r) + r;
-        const y = Math.random() * (20 - 2 * r) + r;
-        const points = [...Array(5)].map((_, i) => {
-          const a = (Math.PI * 2 * i) / 5;
-          // move each point a bit randomly outwards or inwards
-
-          // return `${x + Math.cos(a) * r},${y + Math.sin(a) * r}`;
-          return `${x + Math.cos(a) * (r + Math.random() * 2 - 1)},${
-            y + Math.sin(a) * (r + Math.random() * 2 - 1)
-          }`;
-        });
-        return <polygon key={i} points={points.join(" ")} fill="#C0C0C0" />;
-      })}
-    </svg>
-  ),
-  // gold is shown as a earth-colored background with larger gold-colored rocks
-  gold: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#8B4513" />
-      {[...Array(5)].map((_, i) => {
-        // each rock is a random polygon with five edges
-        const r = Math.random() * 3 + 3;
-        const x = Math.random() * (20 - 2 * r) + r;
-        const y = Math.random() * (20 - 2 * r) + r;
-        const points = [...Array(5)].map((_, i) => {
-          const a = (Math.PI * 2 * i) / 5;
-          // move each point a bit randomly outwards or inwards
-
-          // return `${x + Math.cos(a) * r},${y + Math.sin(a) * r}`;
-          return `${x + Math.cos(a) * (r + Math.random() * 2 - 1)},${
-            y + Math.sin(a) * (r + Math.random() * 2 - 1)
-          }`;
-        });
-        return <polygon key={i} points={points.join(" ")} fill="#FFD700" />;
-      })}
-    </svg>
-  ),
-  // diamond is shown as a earth-colored background with larger diamond-colored rocks
-  diamond: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#8B4513" />
-      {[...Array(5)].map((_, i) => {
-        // each rock is a random polygon with five edges
-        const r = Math.random() * 3 + 3;
-        const x = Math.random() * (20 - 2 * r) + r;
-        const y = Math.random() * (20 - 2 * r) + r;
-        const points = [...Array(5)].map((_, i) => {
-          const a = (Math.PI * 2 * i) / 5;
-          // move each point a bit randomly outwards or inwards
-
-          // return `${x + Math.cos(a) * r},${y + Math.sin(a) * r}`;
-          return `${x + Math.cos(a) * (r + Math.random() * 2 - 1)},${
-            y + Math.sin(a) * (r + Math.random() * 2 - 1)
-          }`;
-        });
-        return <polygon key={i} points={points.join(" ")} fill="#B9F2FF" />;
-      })}
-    </svg>
-  ),
-  // lava is red with brighter red magma chunks
-  lava: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#FF0000" />
-      {[...Array(5)].map((_, i) => {
-        // each rock is a random polygon with five edges
-        const r = Math.random() * 3 + 3;
-        const x = Math.random() * (20 - 2 * r) + r;
-        const y = Math.random() * (20 - 2 * r) + r;
-        const points = [...Array(5)].map((_, i) => {
-          const a = (Math.PI * 2 * i) / 5;
-          // move each point a bit randomly outwards or inwards
-
-          // return `${x + Math.cos(a) * r},${y + Math.sin(a) * r}`;
-          return `${x + Math.cos(a) * (r + Math.random() * 2 - 1)},${
-            y + Math.sin(a) * (r + Math.random() * 2 - 1)
-          }`;
-        });
-        return <polygon key={i} points={points.join(" ")} fill="#FF4500" />;
-      })}
-    </svg>
-  ),
-  // treasure is a treasure box shape
-  treasure: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-      <rect width="20" height="20" fill="#8B4513" />
-      <rect x="3" y="8" width="14" height="8" fill="#CD853F" />
-      <path d="M3 8 C3 5 17 5 17 8" fill="#CD853F" />
-      <rect x="3" y="8" width="14" height="1" fill="#8B4513" />
-      <rect x="8" y="8" width="4" height="8" fill="#FFD700" />
-      <circle cx="10" cy="12" r="1" fill="#8B4513" />
-    </svg>
-  ),
-  // unknown is a dark gray tile with five small question marks at random locations with random sizes
-  unknown: () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <rect width="20" height="20" fill="#5C4033" />
-      {[...Array(5)].map((_, i) => (
-        <text
-          key={i}
-          x={Math.random() * 20}
-          y={Math.random() * 20}
-          fontSize={Math.random() * 4 + 4}
-          fill="#888"
-        >
-          ?
-        </text>
-      ))}
-    </svg>
-  ),
-};
