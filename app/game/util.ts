@@ -25,7 +25,7 @@ export function useLocalStorage<T>(
 export function usePlayerSessionSecret() {
   const [sessionSecret] = useLocalStorage("playerSessionSecret", () =>
     cryptoRandomId(10)
-  )[0];
+  );
   const [sessionSecretHash, setSessionSecretHash] = useState("");
   useEffect(() => {
     getSHA256Hash(sessionSecret).then(setSessionSecretHash);
