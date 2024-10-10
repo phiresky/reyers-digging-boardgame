@@ -4,14 +4,19 @@ import { randomGenerator } from "~/util";
 type PlayerState = {
   fuel: number;
   coins: number;
-  hull: number;
-  digger: number;
-  radar: number;
+  upgrades: {
+    hull: number;
+    digger: number;
+    tank: number;
+  };
   x: number;
   y: number;
 };
 export class Game {
-  tileWidthPerPlayer = 6;
+  config = {
+    tileWidthPerPlayer: 6,
+    fuelSizes: [10, 20],
+  };
 
   players: { info: { name: string }; state: PlayerState }[] = [
     "Frank",
@@ -21,12 +26,10 @@ export class Game {
   ].map((name, i) => ({
     info: { name },
     state: {
-      fuel: 20,
+      fuel: this.config.fuelSizes[0],
       coins: 10,
-      hull: 1,
-      digger: 0,
-      radar: 1,
-      x: i * this.tileWidthPerPlayer + 3,
+      upgrades: { hull: 0, digger: 0, tank: 0 },
+      x: i * this.config.tileWidthPerPlayer + 3,
       y: 0,
     },
   }));
@@ -36,8 +39,12 @@ export class Game {
   // how many rows each of the layers has
   layerDepths = [1, 5, 4, 3];
   warnings: string[] = [];
-  constructor() {
-    this.grid = randomGrid(this);
+  constructor(seed: string) {
+    this.seed = seed;
+    this.grid = randomGrid2(this);
+    for (let i = 0; i < this.players.length; i++) {
+      revealLayer(this, 1, i);
+    }
     makeAutoObservable(this);
     if (typeof window === "object") Object.assign(window, { game: this });
   }
@@ -55,10 +62,44 @@ export class Game {
     const dX = x - player.state.x;
     const dY = y - player.state.y;
     // check if player is close enough
-    if (Math.abs(dX) + Math.abs(dY) > 1) {
-      this.warn("You can not move there, it is too far!");
+    if (Math.abs(dX) > 0 && Math.abs(dY) > 0) {
+      this.warn("You can not move diagonally!");
       return;
     }
+    if (Math.abs(dX) + Math.abs(dY) > 1) {
+      // can move through air multiple spaces
+      // check every space on the way is air
+      const dx1 = Math.sign(dX);
+      const dy1 = Math.sign(dY);
+      let cx = player.state.x,
+        cy = player.state.y;
+      while (cx !== x || cy !== y) {
+        cx += dx1;
+        cy += dy1;
+        if (this.grid[cy][cx].type !== "air") {
+          this.warn("You can not fly through non-air tiles.");
+          return;
+        }
+      }
+    }
+    const tgtType = this.grid[y][x].type;
+    /*if (tgtType === "unknown") {
+      // this.warn("You can not dig unknown tiles!");
+      // find out which layer playre is digging into
+      const layer = this.layerDepths.findIndex(
+        (depth, layer) =>
+          y >=
+            this.layerDepths
+              .slice(0, layer)
+              .reduce((sum, depth) => sum + depth, 0) &&
+          y <
+            this.layerDepths
+              .slice(0, layer + 1)
+              .reduce((sum, depth) => sum + depth, 0)
+      );
+      revealLayer(this, layer as 1 | 2 | 3, playerI);
+      return;
+    }*/
     const isDigging = this.grid[y][x].type !== "air";
     if (isDigging && this.grid[y][x].type === "rock") {
       this.warn("You can not dig through rock!");
@@ -70,6 +111,7 @@ export class Game {
     }
     if (
       isDigging &&
+      player.state.y + 1 < this.grid.length &&
       this.grid[player.state.y + 1][player.state.x].type === "air"
     ) {
       this.warn("You can not dig while in air!");
@@ -89,7 +131,7 @@ export class Game {
 - Lave: Digging free with hull upgrade. Falls on you, kills you.
 */
     const fuelUsed = {
-      air: 0,
+      air: 1,
       earth: 1,
       rock: 2,
       copper: 2,
@@ -111,12 +153,90 @@ export class Game {
       lava: 0,
     };
 
-    player.state.fuel -= fuelUsed[this.grid[y][x].type];
-    player.state.coins += coinsGained[this.grid[y][x].type];
+    if (y === 0) {
+      player.state.fuel = this.config.fuelSizes[player.state.upgrades.tank];
+    } else {
+      player.state.fuel -= fuelUsed[tgtType];
+    }
+    player.state.coins += coinsGained[tgtType];
     this.grid[y][x] = { type: "air" };
+    if (y < this.grid.length - 1 && this.grid[y + 1][x].type === "unknown") {
+      // this.warn("You can not dig unknown tiles!");
+      // find out which layer playre is digging into
+      const layer = this.layerDepths.findIndex(
+        (depth, layer) =>
+          y + 1 >=
+            this.layerDepths
+              .slice(0, layer)
+              .reduce((sum, depth) => sum + depth, 0) &&
+          y + 1 <
+            this.layerDepths
+              .slice(0, layer + 1)
+              .reduce((sum, depth) => sum + depth, 0)
+      );
+      revealLayer(this, layer as 1 | 2 | 3, playerI);
+    }
   }
   warn(message: string) {
     this.warnings.push(message);
+  }
+}
+
+function randomGrid2(game: Game) {
+  const rng = randomGenerator(game.seed);
+  const grid: Tile[][] = [];
+  const width = game.players.length * game.config.tileWidthPerPlayer;
+
+  for (const [layerI, layerDepth] of game.layerDepths.entries()) {
+    for (let y = 0; y < layerDepth; y++) {
+      const row: Tile[] = [];
+      for (let x = 0; x < width; x++) {
+        if (layerI === 0 && y === 0) {
+          row.push({ type: "air" });
+        } else if (x % game.config.tileWidthPerPlayer === 0) {
+          row.push({ type: "rock" });
+        } else {
+          row.push({ type: "unknown" });
+        }
+      }
+      grid.push(row);
+    }
+  }
+  return grid;
+}
+function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
+  const rng = randomGenerator(game.seed + layer);
+  const layerStartY = game.layerDepths
+    .slice(0, layer)
+    .reduce((sum, depth) => sum + depth, 0);
+  const mineralCountsPerLayer: Record<
+    1 | 2 | 3,
+    Partial<Record<Tile["type"], number>>
+  > = {
+    1: { air: 5, copper: 2, iron: 1 },
+    2: { air: 4, copper: 1, iron: 2, gold: 1, diamond: 1 },
+    3: { air: 3, gold: 2, diamond: 2, treasure: 1, lava: 1 },
+  };
+  // for each player, we add minerals according to the above counts
+  const targetChoices = [];
+  const minX = playerI * game.config.tileWidthPerPlayer + 1;
+  const maxX = minX + game.config.tileWidthPerPlayer - 1;
+  for (let y = layerStartY; y < layerStartY + game.layerDepths[layer]; y++) {
+    for (let x = minX; x < maxX; x++) {
+      game.grid[y][x] = { type: "earth" };
+      targetChoices.push(game.grid[y][x]);
+    }
+  }
+  for (const [mineral, count] of Object.entries(
+    mineralCountsPerLayer[layer]
+  ) as [Tile["type"], number][]) {
+    for (let i = 0; i < count; i++) {
+      const target = targetChoices.splice(
+        Math.floor(rng() * targetChoices.length),
+        1
+      )[0];
+      target.type = mineral;
+    }
   }
 }
 
@@ -124,13 +244,13 @@ function randomGrid(game: Game) {
   const rng = randomGenerator(game.seed);
   // between each player, there is a column of rock.
   // other than that, distribution depends on randomTile per layer.
-  const width = game.players.length * game.tileWidthPerPlayer;
+  const width = game.players.length * game.config.tileWidthPerPlayer;
   const grid: Tile[][] = [];
   for (const [layerI, layerDepth] of game.layerDepths.entries()) {
     for (let y = 0; y < layerDepth; y++) {
       const row: Tile[] = [];
       for (let x = 0; x < width; x++) {
-        if (x % game.tileWidthPerPlayer === 0) {
+        if (x % game.config.tileWidthPerPlayer === 0) {
           row.push({ type: "rock" });
         } else {
           row.push(randomTile(rng, layerI as 0 | 1 | 2 | 3));
@@ -156,6 +276,7 @@ function randomGrid(game: Game) {
  */
 export type Tile = {
   type:
+    | "unknown"
     | "air"
     | "earth"
     | "rock"

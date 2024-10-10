@@ -1,7 +1,7 @@
 import { Fragment } from "react/jsx-runtime";
 import { Game, Tile } from "./logic";
 import { observer } from "mobx-react-lite";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 const GameField: React.FC<{ game: Game }> = observer(({ game }) => {
   return (
@@ -38,7 +38,7 @@ const AboveGround: React.FC<{ game: Game }> = observer((props) => {
       style={{
         ...fr(game.players.length),
         width: `calc(${
-          game.players.length * game.tileWidthPerPlayer
+          game.players.length * game.config.tileWidthPerPlayer
         } * ${tileSize})`,
       }}
     >
@@ -48,8 +48,12 @@ const AboveGround: React.FC<{ game: Game }> = observer((props) => {
           <div>Coins: {player.state.coins}</div>
           <div>Fuel: {player.state.fuel}</div>
           <div>
-            Upgrades: {player.state.digger ? "Digger" : ""}{" "}
-            <button className="border border-black p-1">Buy</button>
+            Upgrades: {player.state.upgrades.digger ? "Digger" : ""}{" "}
+            {player.state.y === 0 ? (
+              <button className="border border-black p-1">Buy</button>
+            ) : (
+              ""
+            )}
           </div>
         </div>
       ))}
@@ -57,15 +61,18 @@ const AboveGround: React.FC<{ game: Game }> = observer((props) => {
   );
 });
 
+const layerBorder = {
+  tailwind: "h-1",
+  css: "0.25rem",
+};
 const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
   // game consists of a grid of width playercount*5 and he^ight 12.
-  const width = game.players.length * game.tileWidthPerPlayer;
+  const width = game.players.length * game.config.tileWidthPerPlayer;
 
   // cumulative sum of lyaer depths
   const layerSplits = game.layerDepths.map((d, i) =>
     game.layerDepths.slice(0, i + 1).reduce((a, b) => a + b, 0)
   );
-
   return (
     <div
       className={`grid relative`}
@@ -75,7 +82,9 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
         <Fragment key={y}>
           {layerSplits.includes(y) && (
             <div
-              className={`h-1 ${y === 1 ? "bg-grass" : "bg-black"}`}
+              className={`${layerBorder.tailwind} ${
+                y === 1 ? "bg-grass" : "bg-black"
+              }`}
               style={{ gridColumn: `span ${width} / span ${width}` }}
             ></div>
           )}
@@ -101,6 +110,11 @@ const GroundGrid: React.FC<{ game: Game }> = observer(({ game }) => {
           name={player.info.name}
           x={player.state.x}
           y={player.state.y}
+          fuelWarning={player.state.fuel < 5}
+          yOffset={(() => {
+            const inx = layerSplits.findIndex((d) => d > player.state.y);
+            return inx >= 0 ? inx : layerSplits.length;
+          })()}
         />
       ))}
     </div>
@@ -116,18 +130,30 @@ function TileView({ tile, y }: { tile: Tile; y: number }) {
   return <>{svg}</>;
 }
 
-function PlayerView({ name, x, y }: { name: string; x: number; y: number }) {
+function PlayerView({
+  x,
+  y,
+  yOffset,
+  fuelWarning,
+}: {
+  name: string;
+  x: number;
+  y: number;
+  yOffset: number;
+  fuelWarning: boolean;
+}) {
   return (
     <div
       className="absolute"
       style={{
-        top: `calc(${y} * ${tileSize})`,
+        top: `calc(${y} * ${tileSize} + ${layerBorder.css} * ${yOffset})`,
         left: `calc(${x} * ${tileSize})`,
         width: tileSize,
         height: tileSize,
       }}
     >
       {playerSvg}
+      {fuelWarning && <div className="absolute inset-0 text-red-700">⚠</div>}
     </div>
   );
 }
@@ -352,13 +378,34 @@ const svgs: { [t in Tile["type"]]: () => JSX.Element } = {
   ),
   // treasure is a treasure box shape
   treasure: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+      <rect width="20" height="20" fill="#8B4513" />
+      <rect x="3" y="8" width="14" height="8" fill="#CD853F" />
+      <path d="M3 8 C3 5 17 5 17 8" fill="#CD853F" />
+      <rect x="3" y="8" width="14" height="1" fill="#8B4513" />
+      <rect x="8" y="8" width="4" height="8" fill="#FFD700" />
+      <circle cx="10" cy="12" r="1" fill="#8B4513" />
+    </svg>
+  ),
+  // unknown is a dark gray tile with five small question marks at random locations with random sizes
+  unknown: () => (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 20 20"
       fill="currentColor"
     >
-      <path d="M 10 2 L 2 6 L 2 14 L 10 18 L 18 14 L 18 6 Z" fill="#FFD700" />
-      <path d="M 10 2 L 10 6 L 18 10 L 10 14 L 2 10 L 10 6 Z" fill="#FFD700" />
+      <rect width="20" height="20" fill="#5C4033" />
+      {[...Array(5)].map((_, i) => (
+        <text
+          key={i}
+          x={Math.random() * 20}
+          y={Math.random() * 20}
+          fontSize={Math.random() * 4 + 4}
+          fill="#888"
+        >
+          ?
+        </text>
+      ))}
     </svg>
   ),
 };
