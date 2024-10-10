@@ -30,6 +30,6 @@ export function usePlayerSessionSecret() {
   useEffect(() => {
     getSHA256Hash(sessionSecret).then(setSessionSecretHash);
   }, [sessionSecret]);
-
+  console.log("sess", sessionSecret, sessionSecretHash);
   return [sessionSecret, sessionSecretHash];
 }

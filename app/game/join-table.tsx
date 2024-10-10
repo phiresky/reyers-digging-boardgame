@@ -7,12 +7,13 @@ import { useState } from "react";
 export function JoinTable(props: { tableId?: string }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const server = params.get("server");
+  const server =
+    params.get("server") ?? new URL("/server", window.location.href);
   const [name, setName] = useLocalStorage("playerName", () => "");
   const [sessionSecret, sessionSecretHash] = usePlayerSessionSecret();
   const [error, setError] = useState<string | null>(null);
   return (
-    <nav className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-gray-200 p-6 dark:border-gray-700">
+    <nav className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-gray-200 p-6">
       Enter your name:
       <input
         className="border border-blue-500"
@@ -22,7 +23,7 @@ export function JoinTable(props: { tableId?: string }) {
         title="username must be 3-20 characters long and contain only letters, numbers, and -_."
       />
       <button
-        className="group flex items-center gap-3 self-stretch p-3 leading-normal text-blue-700 hover:underline dark:text-blue-500"
+        className="group flex items-center gap-3 self-stretch p-3 leading-normal text-blue-700 hover:underline"
         onClick={async () => {
           try {
             const tableId = props.tableId ?? cryptoRandomId(10);
