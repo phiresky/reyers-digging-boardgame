@@ -1,14 +1,12 @@
-import { useNavigate, useSearchParams } from "@remix-run/react";
+import { useNavigate } from "@remix-run/react";
+import { useState } from "react";
 import { cryptoRandomId } from "~/util";
 import { api } from "./api-client";
-import { useLocalStorage, usePlayerSessionSecret } from "./util";
-import { useState } from "react";
+import { useApiServer, useLocalStorage, usePlayerSessionSecret } from "./util";
 
 export function JoinTable(props: { tableId?: string }) {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const server =
-    params.get("server") ?? new URL("/server", window.location.href).toString();
+  const server = useApiServer();
   const [name, setName] = useLocalStorage("playerName", () => "");
   const [sessionSecret, sessionSecretHash] = usePlayerSessionSecret();
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +21,7 @@ export function JoinTable(props: { tableId?: string }) {
         title="username must be 3-20 characters long and contain only letters, numbers, and -_."
       />
       <button
-        className="group flex items-center gap-3 self-stretch p-3 leading-normal text-blue-700 hover:underline"
+        className="group flex items-center gap-3 self-stretch p-3 leading-normal text-blue-700 hover:underline border border-black mx-auto"
         onClick={async () => {
           try {
             const tableId = props.tableId ?? cryptoRandomId(10);

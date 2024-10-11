@@ -17,12 +17,14 @@ type PlayerState = {
   upgrades: UpgradeId[];
   x: number;
   y: number;
+  expedition: number;
 };
+type LayerIndex = 0 | 1 | 2 | 3 | 4;
 export const defaultGameConfig = {
   tileWidthPerPlayer: 6,
   fuelSizes: [10, 20],
   // how many rows each layer has (the first layer is the air above ground)
-  layerDepths: [1, 5, 4, 4],
+  layerDepths: [1, 5, 4, 3, 2] as [number, number, number, number, number],
   availableUpgrades: [
     {
       id: "fuel" as UpgradeId,
@@ -109,6 +111,7 @@ export class Game {
       state: {
         fuel: this.config.fuelSizes[0],
         coins: 10,
+        expedition: 0,
         upgrades: [],
         x: i * this.config.tileWidthPerPlayer + 3,
         y: 0,
@@ -145,7 +148,22 @@ export class Game {
 
     const digError = this.canDig(playerI, player, x, y);
     if (digError) throw new PlayerActionError(digError);
+    if (player.state.y === 0 && y !== 0) {
+      // trying to start new expedition
+      const myExpedition = player.state.expedition;
+      const unfinishedPlayers = this.players.filter(
+        (player) => player.state.expedition < myExpedition
+      );
+      if (unfinishedPlayers.length > 0) {
+        throw new PlayerActionError(
+          `Waiting for players ${unfinishedPlayers
+            .map((p) => p.info.name)
+            .join(", ")} to finish their expedition ${myExpedition - 1 + 1}.`
+        );
+      }
+    }
     // move player to clicked position
+    const previousY = player.state.y;
     player.state.x = x;
     player.state.y = y;
     /*
@@ -164,6 +182,10 @@ export class Game {
     }
     if (y === 0) {
       player.state.fuel = this.getMaxFuel(player);
+      if (previousY > 0) {
+        // finish expedition!
+        player.state.expedition++;
+      }
     } else {
       player.state.fuel -= this.config.digging.fuelUsed[tgtType];
     }
@@ -194,7 +216,7 @@ export class Game {
               .slice(0, layer + 1)
               .reduce((sum, depth) => sum + depth, 0)
       );
-      revealLayer(this, layer as 1 | 2 | 3, playerI);
+      revealLayer(this, layer as LayerIndex, playerI);
     }
   }
   canDig(
@@ -209,8 +231,9 @@ export class Game {
     if (Math.abs(dX) > 0 && Math.abs(dY) > 0) {
       return "You can not move that far!";
     }
-
-    if (Math.abs(dX) + Math.abs(dY) > 1) {
+    const totalDist = Math.abs(dX) + Math.abs(dY);
+    if (totalDist > 1) {
+      if (totalDist > 3) return "You can only fly three spaces in the air";
       // can move through air multiple spaces
       // check every space on the way is air
       const dx1 = Math.sign(dX);
@@ -302,18 +325,20 @@ function emptyGrid(game: Game) {
   }
   return grid;
 }
-function revealLayer(game: Game, layer: 1 | 2 | 3, playerI: number) {
+function revealLayer(game: Game, layer: LayerIndex, playerI: number) {
   const rng = randomGenerator(game.seed + layer + playerI);
   const layerStartY = game.config.layerDepths
     .slice(0, layer)
     .reduce((sum, depth) => sum + depth, 0);
   const mineralCountsPerLayer: Record<
-    1 | 2 | 3,
+    LayerIndex,
     Partial<Record<Tile["type"], number>>
   > = {
+    0: {},
     1: { air: 5, copper: 2, iron: 1 },
     2: { air: 4, copper: 1, iron: 2, gold: 1, diamond: 1 },
-    3: { air: 3, gold: 2, diamond: 2, treasure: 1, lava: 3 },
+    3: { air: 3, gold: 2, diamond: 2, treasure: 0, lava: 3 },
+    4: { lava: 5, treasure: 1 },
   };
   // for each player, we add minerals according to the above counts
   const targetChoices = [];

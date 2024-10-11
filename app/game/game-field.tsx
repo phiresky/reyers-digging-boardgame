@@ -1,15 +1,18 @@
 import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
 import { Fragment } from "react/jsx-runtime";
-import { randomGenerator } from "~/util";
+import { cryptoRandomId, getSHA256Hash, randomGenerator } from "~/util";
 import { JoinTable } from "./join-table";
 import { Game, Tile } from "./logic";
 import { TablePlayerSeat } from "./player";
 import { airAbove, PlayerSvg, svgs } from "./svgs";
 import { UpgradeDialog } from "./upgrade-dialog";
+import { api } from "./api-client";
+import { useApiServer } from "./util";
 
 const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
   ({ player }) => {
+    const server = useApiServer();
     // before game start, just list players
     if (!player.game)
       return (
@@ -22,12 +25,35 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
               .join(", ")}
           </div>
           {player.playerId === 0 ? (
-            <button
-              className="border border-black p-1"
-              onClick={() => player.startGame()}
-            >
-              Start Game
-            </button>
+            <>
+              <button
+                className="border border-black p-1 m-1"
+                onClick={() => player.startGame()}
+              >
+                Start Game
+              </button>
+              <button
+                className="border border-gray text-gray p-1 block m-1"
+                onClick={async () => {
+                  const sessionSecret = cryptoRandomId(10);
+                  const sessionSecretHash = await getSHA256Hash(sessionSecret);
+                  const tableId = player.tableId;
+                  await api(server, {
+                    tableId,
+                    sessionSecret,
+                    event: {
+                      type: "system-join-player",
+                      player: {
+                        name: cryptoRandomId(5),
+                        sessionSecretHash,
+                      },
+                    },
+                  });
+                }}
+              >
+                Add fake user
+              </button>
+            </>
           ) : player.playerId === undefined ? (
             <JoinTable tableId={player.tableId} />
           ) : (
@@ -35,10 +61,44 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
           )}
         </div>
       );
+    const minExpedition = Math.min(
+      ...player.game.players.map((p) => p.state.expedition)
+    );
+    let stateStr = "You are spectating.";
+    if (player.playerId !== undefined) {
+      const me = player.game.players[player.playerId];
+      if (minExpedition === me.state.expedition) {
+        if (me.state.y === 0) {
+          stateStr = `Your turn! Start expedition ${
+            minExpedition + 1
+          } by digging!`;
+        } else {
+          stateStr = `Finish expedition ${
+            minExpedition + 1
+          } and buy upgrades by returning to the surface!`;
+        }
+      } else {
+        const players = player.game.players
+          .filter((p) => p.state.expedition < me.state.expedition)
+          .map((p) => p.info.name)
+          .join(", ");
+        stateStr = `Waiting for ${players} to finish expedition ${
+          minExpedition + 1
+        }...`;
+      }
+    }
     return (
-      <div className="w-100 overflow-x-scroll">
-        <AboveGround player={player} />
-        <GroundGrid player={player} />
+      <div className="bg-black">
+        <h4 className="text-xl bg-blue-300 text-center">Reyers Digging Game</h4>
+        {/*<h5 className="text-l bg-blue-300 text-center">Expedition {1}</h5>*/}
+        <h5 className="text-l bg-blue-300 text-center">{stateStr}</h5>
+        <div
+          className="max-w-full mx-auto overflow-x-scroll"
+          style={{ width: "fit-content" }}
+        >
+          <AboveGround player={player} />
+          <GroundGrid player={player} />
+        </div>
         <CheatSheet game={player.game} />
         {player.upgradeDialog && <UpgradeDialog player={player} />}
 
@@ -87,7 +147,7 @@ const AboveGround: React.FC<{ player: TablePlayerSeat }> = observer((props) => {
             </div>
             {player.info.name} {me.playerId === i ? " (you)" : ""}
           </div>
-          <div className="ml-3">
+          <div className="ml-12">
             <div>Coins: {player.state.coins}</div>
             <div>Fuel: {player.state.fuel}</div>
             <div>
@@ -143,6 +203,7 @@ const GroundGrid: React.FC<{ player: TablePlayerSeat }> = observer(
         price =
           tile.type === "unknown" ? 0 : game.config.digging.fuelUsed[tile.type];
       }
+      if (y === 0 && p.state.y === 0) price = 0;
       return { distance, price };
     };
     const distances = [
@@ -314,7 +375,7 @@ function LineArrow({ dx, dy, distance, price }: DistanceHint) {
 
 function CheatSheet(props: { game: Game }) {
   return (
-    <>
+    <div className="bg-black text-white">
       Cheat Sheet
       <div className="grid grid-cols-3 max-w-[20rem]">
         <div>Tile</div>
@@ -347,6 +408,6 @@ function CheatSheet(props: { game: Game }) {
           </>
         ))}
       </div>
-    </>
+    </div>
   );
 }

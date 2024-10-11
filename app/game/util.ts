@@ -1,3 +1,4 @@
+import { useSearchParams } from "@remix-run/react";
 import { useState, useLayoutEffect, useEffect } from "react";
 import { cryptoRandomId, getSHA256Hash } from "~/util";
 
@@ -34,4 +35,11 @@ export function usePlayerSessionSecret() {
   }, [sessionSecret]);
   console.log("sess", sessionSecret, sessionSecretHash);
   return [sessionSecret, sessionSecretHash];
+}
+
+export function useApiServer() {
+  const [params] = useSearchParams();
+  return (
+    params.get("server") ?? new URL("/server", window.location.href).toString()
+  );
 }

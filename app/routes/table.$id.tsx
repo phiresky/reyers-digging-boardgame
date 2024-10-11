@@ -2,7 +2,7 @@ import { MetaFunction, useParams, useSearchParams } from "@remix-run/react";
 import { useEffect, useState } from "react";
 import GameField from "~/game/game-field";
 import { TablePlayerSeat } from "~/game/player";
-import { usePlayerSessionSecret } from "~/game/util";
+import { useApiServer, usePlayerSessionSecret } from "~/game/util";
 
 export const meta: MetaFunction = () => {
   return [
@@ -13,8 +13,7 @@ export const meta: MetaFunction = () => {
 
 export default function Table() {
   const { id } = useParams();
-  const [params] = useSearchParams();
-  const server = params.get("server");
+  const server = useApiServer();
   const [sessionSecret, sessionSecretHash] = usePlayerSessionSecret();
   if (!id || !server || !sessionSecretHash) return <div>no table</div>;
   return (
