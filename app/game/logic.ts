@@ -11,13 +11,14 @@ class PlayerActionError extends Error {
   }
 }
 export type UpgradeId = "storage" | "fuel" | "digger";
-type PlayerState = {
+export type PlayerState = {
   fuel: number;
   coins: number;
   upgrades: UpgradeId[];
   x: number;
   y: number;
   expedition: number;
+  treasureFound: false | "current-expedition" | true;
 };
 type LayerIndex = 0 | 1 | 2 | 3 | 4;
 export const defaultGameConfig = {
@@ -115,6 +116,7 @@ export class Game {
         upgrades: [],
         x: i * this.config.tileWidthPerPlayer + 3,
         y: 0,
+        treasureFound: false,
       },
     }));
     this.seed = init.seed;
@@ -185,11 +187,16 @@ export class Game {
       if (previousY > 0) {
         // finish expedition!
         player.state.expedition++;
+        if (player.state.treasureFound === "current-expedition") {
+          player.state.treasureFound = true;
+        }
       }
     } else {
       player.state.fuel -= this.config.digging.fuelUsed[tgtType];
     }
     player.state.coins += this.config.digging.coinsGained[tgtType];
+    if (tgtType === "treasure")
+      player.state.treasureFound = "current-expedition";
     this.grid[y][x] = { type: "air" };
     if (player.state.fuel <= 0) {
       this.chainEvent({

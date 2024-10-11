@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Fragment } from "react/jsx-runtime";
 import { cryptoRandomId, getSHA256Hash, randomGenerator } from "~/util";
 import { JoinTable } from "./join-table";
-import { Game, Tile } from "./logic";
+import { Game, PlayerInfo, PlayerState, Tile } from "./logic";
 import { TablePlayerSeat } from "./player";
 import { airAbove, PlayerSvg, svgs } from "./svgs";
 import { UpgradeDialog } from "./upgrade-dialog";
@@ -65,7 +65,22 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
       ...player.game.players.map((p) => p.state.expedition)
     );
     let stateStr = "You are spectating.";
-    if (player.playerId !== undefined) {
+    let gameEnding = false;
+    let winner: { info: PlayerInfo; state: PlayerState } | null = null;
+    const endingPlayer = player.game.players.find((p) => p.state.treasureFound);
+    if (endingPlayer) {
+      const allOnSamePage = player.game.players.every(
+        (p) => p.state.expedition === minExpedition
+      );
+      gameEnding = true;
+      if (endingPlayer.state.treasureFound === true && allOnSamePage) {
+        // winner has the most points
+        winner = player.game.players.reduce((a, b) =>
+          a.state.coins > b.state.coins ? a : b
+        );
+      }
+    }
+    if (player.playerId !== undefined && !winner) {
       const me = player.game.players[player.playerId];
       if (minExpedition === me.state.expedition) {
         if (me.state.y === 0) {
@@ -92,6 +107,21 @@ const GameField: React.FC<{ player: TablePlayerSeat }> = observer(
         <h4 className="text-xl bg-blue-300 text-center">Reyers Digging Game</h4>
         {/*<h5 className="text-l bg-blue-300 text-center">Expedition {1}</h5>*/}
         <h5 className="text-l bg-blue-300 text-center">{stateStr}</h5>
+        <h4 className="text-xl bg-blue-300 text-center text-red-800">
+          {winner ? (
+            <>
+              Game Over! The winner is {winner.info.name} with{" "}
+              {winner.state.coins} coins.
+            </>
+          ) : gameEnding ? (
+            <>
+              {endingPlayer?.info.name} has collected treasure! This is the last
+              round!
+            </>
+          ) : (
+            <></>
+          )}
+        </h4>
         <div
           className="max-w-full mx-auto overflow-x-scroll"
           style={{ width: "fit-content" }}
