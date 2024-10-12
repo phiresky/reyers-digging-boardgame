@@ -208,6 +208,7 @@ export class Game {
       player.state.y = 0;
       player.state.coins = 0;
       player.state.fuel = this.getMaxFuel(player);
+      player.state.expedition++;
     }
     if (y < this.grid.length - 1 && this.grid[y + 1][x].type === "unknown") {
       // this.warn("You can not dig unknown tiles!");
